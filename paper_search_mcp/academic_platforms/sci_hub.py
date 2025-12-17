@@ -12,6 +12,8 @@ import re
 import hashlib
 import logging
 import os
+import subprocess
+import shutil
 from typing import Optional
 from datetime import datetime
 
@@ -22,11 +24,13 @@ import pymupdf4llm
 logger = logging.getLogger(__name__)
 
 
-# Sci-Hub 可用镜像列表
+# Sci-Hub 可用镜像列表（按可用性排序，2024/2025 更新）
 SCIHUB_MIRRORS = [
-    "https://sci-hub.se",
-    "https://sci-hub.st", 
     "https://sci-hub.ru",
+    "https://sci-hub.wf",
+    "https://sci-hub.ren",
+    "https://sci-hub.se",
+    "https://sci-hub.st"
 ]
 
 
@@ -70,8 +74,71 @@ class SciHubFetcher:
         
         logger.info(f"SciHub initialized with mirror: {self.base_url}")
 
+    def _download_with_curl(self, url: str, file_path: str) -> bool:
+        """使用 curl 下载 PDF（更可靠）
+        
+        Args:
+            url: PDF URL
+            file_path: 保存路径
+            
+        Returns:
+            是否成功
+        """
+        if not shutil.which('curl'):
+            return False
+        
+        try:
+            result = subprocess.run(
+                [
+                    'curl', '-L',  # 跟随重定向
+                    '-o', file_path,
+                    '--connect-timeout', '30',
+                    '--max-time', '300',  # 最大 5 分钟
+                    '-k',  # 允许不安全的 SSL（Sci-Hub 证书问题）
+                    '-f',  # 失败时返回错误码
+                    '-s',  # 静默模式
+                    '--retry', '3',
+                    '--retry-delay', '2',
+                    '-A', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    url
+                ],
+                capture_output=True,
+                text=True,
+                timeout=360
+            )
+            
+            if result.returncode == 0 and os.path.exists(file_path):
+                file_size = os.path.getsize(file_path)
+                # 检查是否是有效的 PDF（至少 10KB，且以 %PDF 开头）
+                if file_size > 10000:
+                    with open(file_path, 'rb') as f:
+                        header = f.read(4)
+                    if header == b'%PDF':
+                        logger.info(f"PDF downloaded with curl: {file_path} ({file_size} bytes)")
+                        return True
+                    else:
+                        logger.warning(f"Downloaded file is not a PDF")
+                        os.remove(file_path)
+                        return False
+                else:
+                    logger.warning(f"Downloaded file too small: {file_size} bytes")
+                    os.remove(file_path)
+                    return False
+            else:
+                logger.warning(f"curl failed: {result.stderr}")
+                return False
+                
+        except subprocess.TimeoutExpired:
+            logger.warning("curl download timed out")
+            return False
+        except Exception as e:
+            logger.warning(f"curl error: {e}")
+            return False
+
     def download_pdf(self, doi: str, save_path: Optional[str] = None) -> str:
         """通过 DOI 下载论文 PDF
+        
+        优先使用 curl（更可靠），失败时回退到 requests。
         
         Args:
             doi: 论文 DOI（如 "10.1038/nature12373"）
@@ -89,31 +156,60 @@ class SciHubFetcher:
         output_dir.mkdir(parents=True, exist_ok=True)
         
         try:
-            # 获取 PDF URL
+            # 获取 PDF URL（必须用 requests 解析 HTML）
             pdf_url = self._get_pdf_url(doi)
             if not pdf_url:
                 return f"Error: Could not find PDF for DOI {doi} on Sci-Hub"
             
-            # 下载 PDF
-            response = self.session.get(pdf_url, verify=False, timeout=self.timeout)
+            # 生成文件路径
+            clean_doi = re.sub(r'[^\w\-_.]', '_', doi)
+            file_path = output_dir / f"scihub_{clean_doi}.pdf"
             
-            if response.status_code != 200:
-                return f"Error: Download failed with status {response.status_code}"
+            # 方法1: 优先使用 curl（更可靠）
+            if self._download_with_curl(pdf_url, str(file_path)):
+                return str(file_path)
             
-            # 验证是 PDF
-            content_type = response.headers.get('Content-Type', '')
-            if 'pdf' not in content_type.lower() and not response.content[:4] == b'%PDF':
-                return f"Error: Response is not a PDF (Content-Type: {content_type})"
+            logger.info("curl failed, falling back to requests...")
             
-            # 保存文件
-            filename = self._generate_filename(doi, response)
-            file_path = output_dir / filename
+            # 方法2: 回退到 requests（带重试）
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    response = self.session.get(
+                        pdf_url, 
+                        verify=False, 
+                        timeout=(30, 180),  # 连接 30s，读取 180s
+                        stream=True
+                    )
+                    
+                    if response.status_code != 200:
+                        logger.warning(f"Download failed with status {response.status_code}")
+                        continue
+                    
+                    # 流式写入
+                    with open(file_path, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                    
+                    # 验证是 PDF
+                    with open(file_path, 'rb') as f:
+                        header = f.read(4)
+                    
+                    if header != b'%PDF':
+                        logger.warning("Downloaded file is not a PDF")
+                        os.remove(file_path)
+                        continue
+                    
+                    logger.info(f"PDF downloaded with requests: {file_path}")
+                    return str(file_path)
+                    
+                except requests.exceptions.Timeout:
+                    logger.warning(f"Timeout (attempt {attempt + 1}/{max_retries})")
+                except Exception as e:
+                    logger.warning(f"Download error (attempt {attempt + 1}/{max_retries}): {e}")
             
-            with open(file_path, 'wb') as f:
-                f.write(response.content)
-            
-            logger.info(f"PDF downloaded: {file_path}")
-            return str(file_path)
+            return f"Error: Could not download PDF for DOI {doi}"
             
         except Exception as e:
             logger.error(f"Download failed for {doi}: {e}")

@@ -20,6 +20,8 @@ import logging
 from ..paper import Paper
 
 import pymupdf4llm
+import subprocess
+import shutil
 
 logger = logging.getLogger(__name__)
 
@@ -315,8 +317,61 @@ class SemanticSearcher(PaperSource):
             logger.error(f"Failed to get paper details: {e}")
             return None
 
+    def _download_with_curl(self, url: str, pdf_path: str) -> bool:
+        """使用 curl 下载 PDF（更可靠）
+        
+        Args:
+            url: PDF URL
+            pdf_path: 保存路径
+            
+        Returns:
+            是否成功
+        """
+        if not shutil.which('curl'):
+            return False
+        
+        try:
+            result = subprocess.run(
+                [
+                    'curl', '-L',  # 跟随重定向
+                    '-o', pdf_path,
+                    '--connect-timeout', '30',
+                    '--max-time', '300',  # 最大 5 分钟
+                    '-f',  # 失败时返回错误码
+                    '-s',  # 静默模式
+                    '--retry', '3',
+                    '--retry-delay', '2',
+                    url
+                ],
+                capture_output=True,
+                text=True,
+                timeout=360
+            )
+            
+            if result.returncode == 0 and os.path.exists(pdf_path):
+                file_size = os.path.getsize(pdf_path)
+                if file_size > 1000:  # 至少 1KB
+                    logger.info(f"PDF downloaded with curl: {pdf_path} ({file_size} bytes)")
+                    return True
+                else:
+                    os.remove(pdf_path)
+                    logger.warning(f"Downloaded file too small: {file_size} bytes")
+                    return False
+            else:
+                logger.warning(f"curl failed: {result.stderr}")
+                return False
+                
+        except subprocess.TimeoutExpired:
+            logger.warning("curl download timed out")
+            return False
+        except Exception as e:
+            logger.warning(f"curl error: {e}")
+            return False
+
     def download_pdf(self, paper_id: str, save_path: str) -> str:
         """下载论文 PDF
+        
+        优先使用 curl（更可靠），失败时回退到 requests。
         
         Args:
             paper_id: 论文 ID（支持多种格式）
@@ -338,12 +393,17 @@ class SemanticSearcher(PaperSource):
         filename = f"semantic_{safe_id}.pdf"
         pdf_path = os.path.join(save_path, filename)
         
-        # 下载超时设置：连接超时 10 秒，读取超时 120 秒
-        download_timeout = (10, 120)
+        # 方法1: 优先使用 curl（更可靠）
+        if self._download_with_curl(paper.pdf_url, pdf_path):
+            return pdf_path
+        
+        logger.info("curl failed, falling back to requests...")
+        
+        # 方法2: 回退到 requests
+        download_timeout = (30, 180)  # 连接 30s，读取 180s
         
         for attempt in range(self.max_retries):
             try:
-                # 使用 session 并启用流式下载
                 response = self.session.get(
                     paper.pdf_url, 
                     timeout=download_timeout,
@@ -351,33 +411,25 @@ class SemanticSearcher(PaperSource):
                 )
                 response.raise_for_status()
                 
-                # 流式写入文件
                 with open(pdf_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         if chunk:
                             f.write(chunk)
                 
-                logger.info(f"PDF downloaded: {pdf_path}")
+                logger.info(f"PDF downloaded with requests: {pdf_path}")
                 return pdf_path
                 
             except requests.exceptions.Timeout as e:
                 logger.warning(f"Download timeout (attempt {attempt + 1}/{self.max_retries}): {e}")
                 if attempt < self.max_retries - 1:
-                    wait_time = 2 ** attempt
-                    logger.info(f"Retrying in {wait_time}s...")
-                    time.sleep(wait_time)
-                else:
-                    return f"Error downloading PDF: Timeout after {self.max_retries} attempts"
+                    time.sleep(2 ** attempt)
                     
             except requests.exceptions.RequestException as e:
                 logger.warning(f"Download failed (attempt {attempt + 1}/{self.max_retries}): {e}")
                 if attempt < self.max_retries - 1:
-                    wait_time = 2 ** attempt
-                    time.sleep(wait_time)
-                else:
-                    return f"Error downloading PDF: {e}"
+                    time.sleep(2 ** attempt)
         
-        return f"Error downloading PDF: Failed after {self.max_retries} attempts"
+        return f"Error downloading PDF: All methods failed for {paper.pdf_url}"
 
     def read_paper(self, paper_id: str, save_path: str) -> str:
         """下载并提取论文文本
