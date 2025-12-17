@@ -48,11 +48,15 @@ RePEc 是最大的开放经济学文献库，支持丰富的搜索选项：
 ### 安装
 
 ```bash
-# 使用 uv (推荐)
-uv add paper-search-mcp
+# 克隆仓库
+git clone https://github.com/h-lu/paper-search-mcp.git
+cd paper-search-mcp
+
+# 使用 uv 安装 (推荐)
+uv pip install -e .
 
 # 或使用 pip
-pip install paper-search-mcp
+pip install -e .
 ```
 
 ### 配置 Claude Desktop
