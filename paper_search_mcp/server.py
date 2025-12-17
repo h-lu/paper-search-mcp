@@ -266,9 +266,9 @@ async def download_pubmed(paper_id: str, save_path: Optional[str] = None) -> str
     
     PubMed is a metadata database - it does not host PDFs.
     
-    INSTEAD, USE:
-    - download_scihub(doi) if paper has DOI and published before 2023
-    - Access publisher's website via the paper's URL
+    INSTEAD (try in order):
+    1. download_scihub(doi) - if published before 2023
+    2. download_semantic(id) - last resort
     
     Args:
         paper_id: PMID (unused).
@@ -284,7 +284,9 @@ async def download_pubmed(paper_id: str, save_path: Optional[str] = None) -> str
 async def read_pubmed_paper(paper_id: str, save_path: Optional[str] = None) -> str:
     """PubMed does NOT support direct paper reading.
     
-    INSTEAD: Use search_pubmed to get the DOI, then use read_scihub_paper(doi).
+    INSTEAD (try in order):
+    1. read_scihub_paper(doi) - if published before 2023
+    2. read_semantic_paper(id) - last resort
     
     Args:
         paper_id: PMID (unused).
@@ -440,12 +442,12 @@ async def search_google_scholar(query: str, max_results: int = 10) -> List[Dict]
     
     LIMITATIONS:
     - Uses web scraping (may be rate-limited)
-    - Does NOT support PDF download or reading
-    - For PDFs: Get DOI from results, then use download_scihub(doi)
+    - Does NOT support PDF download
     
-    WORKFLOW:
-    1. search_google_scholar(query) -> get results with DOI
-    2. For full text: download_scihub(doi) or read_scihub_paper(doi)
+    FOR FULL TEXT (try in order):
+    1. download_arxiv(id) - if arXiv preprint
+    2. download_scihub(doi) - if published before 2023
+    3. download_semantic(id) - last resort
     
     Args:
         query: Search terms (any academic topic).
@@ -557,12 +559,6 @@ async def search_semantic(
     COVERAGE: ALL academic fields - sciences, humanities, medicine, etc.
     Indexes 200M+ papers from journals, conferences, and preprints.
     
-    FEATURES:
-    - AI-powered relevance ranking
-    - Citation counts and influential citations
-    - Year filtering support
-    - Open-access PDF links (when available)
-    
     WORKFLOW:
     1. search_semantic(query) -> get paper_id or DOI
     2. download_semantic(paper_id) -> get PDF (if open-access)
@@ -586,34 +582,31 @@ async def search_semantic(
 
 @mcp.tool()
 async def download_semantic(paper_id: str, save_path: Optional[str] = None) -> str:
-    """Download PDF via Semantic Scholar (if open-access available).
+    """Download PDF via Semantic Scholar (open-access only, use as LAST RESORT).
     
-    Works for open-access papers only. If no PDF available,
-    get the DOI from search results and use download_scihub(doi).
+    DOWNLOAD PRIORITY (try in order):
+    1. If arXiv paper -> use download_arxiv(arxiv_id) (always works)
+    2. If published before 2023 -> use download_scihub(doi)
+    3. Use this tool as last resort (may not have PDF)
     
     Args:
-        paper_id: One of these formats:
-            - Semantic Scholar ID: '649def34f8be52c8b66281af98ae884c09aef38b'
-            - DOI: 'DOI:10.18653/v1/N18-3011'
-            - arXiv: 'ARXIV:2106.15928'
-            - PMID: 'PMID:19872477'
+        paper_id: Semantic Scholar ID, or prefixed: 'DOI:xxx', 'ARXIV:xxx', 'PMID:xxx'
         save_path: Directory to save PDF.
     
     Returns:
         Path to downloaded PDF, or error if not available.
-    
-    Example:
-        download_semantic("ARXIV:2106.15928")
-    """ 
+    """
     return await _download('semantic', paper_id, save_path)
 
 
 @mcp.tool()
 async def read_semantic_paper(paper_id: str, save_path: Optional[str] = None) -> str:
-    """Download and extract text from paper via Semantic Scholar.
+    """Read paper via Semantic Scholar (open-access only, use as LAST RESORT).
     
-    Works for open-access papers only.
-    IF NO PDF: Get DOI from search, use read_scihub_paper(doi).
+    DOWNLOAD PRIORITY (try in order):
+    1. If arXiv paper -> use read_arxiv_paper(arxiv_id)
+    2. If published before 2023 -> use read_scihub_paper(doi)
+    3. Use this tool as last resort
     
     Args:
         paper_id: Semantic Scholar ID or prefixed ID (DOI:, ARXIV:, PMID:).
@@ -621,9 +614,6 @@ async def read_semantic_paper(paper_id: str, save_path: Optional[str] = None) ->
     
     Returns:
         Full paper text in Markdown format.
-    
-    Example:
-        read_semantic_paper("ARXIV:2106.15928")
     """
     return await _read('semantic', paper_id, save_path)
 
@@ -699,10 +689,10 @@ async def download_crossref(paper_id: str, save_path: Optional[str] = None) -> s
     
     CrossRef is a metadata/citation database only - it does not host PDFs.
     
-    INSTEAD, USE:
-    - download_scihub(doi) for papers published before 2023
-    - download_arxiv(id) for arXiv preprints  
-    - The paper's URL to access publisher's website
+    INSTEAD (try in order):
+    1. download_arxiv(id) - if arXiv preprint (always works)
+    2. download_scihub(doi) - if published before 2023
+    3. download_semantic(id) - last resort (may not have PDF)
     
     Args:
         paper_id: DOI (e.g., '10.1038/nature12373').
@@ -720,10 +710,10 @@ async def read_crossref_paper(paper_id: str, save_path: Optional[str] = None) ->
     
     CrossRef provides metadata only, not full-text content.
     
-    INSTEAD, USE:
-    - read_scihub_paper(doi) for papers published before 2023
-    - read_arxiv_paper(id) for arXiv preprints
-    - read_semantic_paper(id) if open access PDF available
+    INSTEAD (try in order):
+    1. read_arxiv_paper(id) - if arXiv preprint
+    2. read_scihub_paper(doi) - if published before 2023
+    3. read_semantic_paper(id) - last resort
     
     Args:
         paper_id: DOI (e.g., '10.1038/nature12373').
@@ -829,13 +819,11 @@ async def search_repec(
 async def download_repec(paper_id: str, save_path: Optional[str] = None) -> str:
     """RePEc/IDEAS does NOT support direct PDF downloads.
     
-    RePEc is a metadata index - PDFs are hosted at original institutions
-    (NBER, Federal Reserve, university repositories, etc.).
+    RePEc is a metadata index - PDFs are hosted at original institutions.
     
-    INSTEAD, USE:
-    - Visit the paper URL to access the source institution
-    - Many working papers (NBER, Fed) are freely available at source
-    - If DOI is available, try download_scihub(doi) for older papers
+    INSTEAD (try in order):
+    1. Visit paper URL - many NBER/Fed papers are freely available
+    2. download_scihub(doi) - if published before 2023
     
     Args:
         paper_id: RePEc handle (unused).
@@ -851,10 +839,9 @@ async def download_repec(paper_id: str, save_path: Optional[str] = None) -> str:
 async def read_repec_paper(paper_id: str, save_path: Optional[str] = None) -> str:
     """RePEc/IDEAS does NOT support direct paper reading.
     
-    INSTEAD:
-    - Visit the paper URL to access full text at the source
-    - Get DOI from search results, then use read_scihub_paper(doi)
-    - Many NBER/Fed working papers are freely downloadable
+    INSTEAD (try in order):
+    1. Visit paper URL - many NBER/Fed papers are freely available
+    2. read_scihub_paper(doi) - if published before 2023
     
     Args:
         paper_id: RePEc handle (unused).

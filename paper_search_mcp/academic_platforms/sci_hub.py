@@ -67,9 +67,13 @@ class SciHubFetcher:
         
         self.session = requests.Session()
         self.session.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
         }
         
         logger.info(f"SciHub initialized with mirror: {self.base_url}")
@@ -255,6 +259,10 @@ class SciHubFetcher:
     def _get_pdf_url(self, doi: str) -> Optional[str]:
         """从 Sci-Hub 获取 PDF 直链"""
         try:
+            # 如果已经是直接的 PDF URL，直接返回
+            if doi.endswith('.pdf'):
+                return doi
+            
             search_url = f"{self.base_url}/{doi}"
             response = self.session.get(search_url, verify=False, timeout=self.timeout)
             
@@ -269,30 +277,49 @@ class SciHubFetcher:
             
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            # 方法 1: embed 标签
+            # 方法 1: embed 标签（现代 Sci-Hub 最常用）
             embed = soup.find('embed', {'type': 'application/pdf'})
-            if embed and embed.get('src'):
-                return self._normalize_url(embed['src'])
+            logger.debug(f"Found embed tag: {embed}")
+            if embed:
+                src = embed.get('src') if hasattr(embed, 'get') else None
+                logger.debug(f"Embed src: {src}")
+                if src and isinstance(src, str):
+                    pdf_url = self._normalize_url(src)
+                    logger.debug(f"Returning PDF URL from embed: {pdf_url}")
+                    return pdf_url
             
-            # 方法 2: iframe
+            # 方法 2: iframe（回退方案）
             iframe = soup.find('iframe')
-            if iframe and iframe.get('src'):
-                return self._normalize_url(iframe['src'])
+            if iframe:
+                src = iframe.get('src') if hasattr(iframe, 'get') else None
+                if src and isinstance(src, str):
+                    pdf_url = self._normalize_url(src)
+                    logger.debug(f"Returning PDF URL from iframe: {pdf_url}")
+                    return pdf_url
             
-            # 方法 3: 下载按钮
+            # 方法 3: 下载按钮的 onclick
             for button in soup.find_all('button'):
-                onclick = button.get('onclick', '')
-                if 'pdf' in onclick.lower():
+                onclick = button.get('onclick', '') if hasattr(button, 'get') else ''
+                if isinstance(onclick, str) and 'pdf' in onclick.lower():
                     match = re.search(r"location\.href='([^']+)'", onclick)
                     if match:
-                        return self._normalize_url(match.group(1))
+                        pdf_url = self._normalize_url(match.group(1))
+                        logger.debug(f"Returning PDF URL from button: {pdf_url}")
+                        return pdf_url
             
-            # 方法 4: 直接链接
-            for link in soup.find_all('a', href=True):
-                href = link['href']
-                if 'pdf' in href.lower() or href.endswith('.pdf'):
-                    return self._normalize_url(href)
+            # 方法 4: 直接下载链接
+            for link in soup.find_all('a'):
+                href = link.get('href', '') if hasattr(link, 'get') else ''
+                if isinstance(href, str) and href and ('pdf' in href.lower() or href.endswith('.pdf')):
+                    if href.startswith('http'):
+                        logger.debug(f"Returning PDF URL from link: {href}")
+                        return href
+                    else:
+                        pdf_url = self._normalize_url(href)
+                        logger.debug(f"Returning PDF URL from link: {pdf_url}")
+                        return pdf_url
             
+            logger.warning(f"No PDF URL found in Sci-Hub page for: {doi}")
             return None
             
         except Exception as e:
@@ -348,7 +375,7 @@ if __name__ == "__main__":
     print("=" * 60)
     
     # 测试一个已知的老论文 DOI
-    test_doi = "10.1038/nature12373"  # 2013 年的论文
+    test_doi = "10.1080/13504851.2021.1890325"  # 2021 年的论文
     
     print(f"\nDownloading: {test_doi}")
     result = fetcher.download_pdf(test_doi)

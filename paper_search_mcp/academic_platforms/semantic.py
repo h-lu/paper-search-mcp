@@ -20,8 +20,6 @@ import logging
 from ..paper import Paper
 
 import pymupdf4llm
-import subprocess
-import shutil
 
 logger = logging.getLogger(__name__)
 
@@ -317,61 +315,8 @@ class SemanticSearcher(PaperSource):
             logger.error(f"Failed to get paper details: {e}")
             return None
 
-    def _download_with_curl(self, url: str, pdf_path: str) -> bool:
-        """使用 curl 下载 PDF（更可靠）
-        
-        Args:
-            url: PDF URL
-            pdf_path: 保存路径
-            
-        Returns:
-            是否成功
-        """
-        if not shutil.which('curl'):
-            return False
-        
-        try:
-            result = subprocess.run(
-                [
-                    'curl', '-L',  # 跟随重定向
-                    '-o', pdf_path,
-                    '--connect-timeout', '30',
-                    '--max-time', '300',  # 最大 5 分钟
-                    '-f',  # 失败时返回错误码
-                    '-s',  # 静默模式
-                    '--retry', '3',
-                    '--retry-delay', '2',
-                    url
-                ],
-                capture_output=True,
-                text=True,
-                timeout=360
-            )
-            
-            if result.returncode == 0 and os.path.exists(pdf_path):
-                file_size = os.path.getsize(pdf_path)
-                if file_size > 1000:  # 至少 1KB
-                    logger.info(f"PDF downloaded with curl: {pdf_path} ({file_size} bytes)")
-                    return True
-                else:
-                    os.remove(pdf_path)
-                    logger.warning(f"Downloaded file too small: {file_size} bytes")
-                    return False
-            else:
-                logger.warning(f"curl failed: {result.stderr}")
-                return False
-                
-        except subprocess.TimeoutExpired:
-            logger.warning("curl download timed out")
-            return False
-        except Exception as e:
-            logger.warning(f"curl error: {e}")
-            return False
-
     def download_pdf(self, paper_id: str, save_path: str) -> str:
         """下载论文 PDF
-        
-        优先使用 curl（更可靠），失败时回退到 requests。
         
         Args:
             paper_id: 论文 ID（支持多种格式）
@@ -387,49 +332,49 @@ class SemanticSearcher(PaperSource):
         if not paper.pdf_url:
             return f"Error: No PDF URL available for paper {paper_id}"
         
-        # 准备保存路径
-        os.makedirs(save_path, exist_ok=True)
-        safe_id = paper_id.replace('/', '_').replace(':', '_')
-        filename = f"semantic_{safe_id}.pdf"
-        pdf_path = os.path.join(save_path, filename)
+        pdf_url = paper.pdf_url
+        logger.info(f"Downloading PDF from: {pdf_url}")
         
-        # 方法1: 优先使用 curl（更可靠）
-        if self._download_with_curl(paper.pdf_url, pdf_path):
+        try:
+            # 直接使用 requests 下载
+            pdf_response = requests.get(pdf_url, timeout=60)
+            pdf_response.raise_for_status()
+            
+            # 验证下载的内容是 PDF
+            content_type = pdf_response.headers.get('Content-Type', '')
+            content = pdf_response.content
+            
+            # 检查是否是 PDF（通过内容头部）
+            if not content.startswith(b'%PDF') and 'application/pdf' not in content_type:
+                logger.warning(f"Downloaded content is not a PDF. Content-Type: {content_type}")
+                # 如果是 HTML 页面（如 OSTI），尝试提取真实 PDF 链接
+                if b'<html' in content[:1000].lower() or b'<!doctype' in content[:1000].lower():
+                    logger.error("Downloaded HTML instead of PDF. The URL may require browser access.")
+                    return f"Error: URL {pdf_url} returned HTML, not PDF. This may require direct browser download."
+            
+            # 准备保存路径
+            os.makedirs(save_path, exist_ok=True)
+            safe_id = paper_id.replace('/', '_').replace(':', '_')
+            filename = f"semantic_{safe_id}.pdf"
+            pdf_path = os.path.join(save_path, filename)
+            
+            with open(pdf_path, "wb") as f:
+                f.write(content)
+            
+            # 最终验证
+            file_size = os.path.getsize(pdf_path)
+            if file_size < 1000:
+                os.remove(pdf_path)
+                return f"Error: Downloaded file too small ({file_size} bytes)"
+            
+            logger.info(f"PDF downloaded successfully: {pdf_path} ({file_size} bytes)")
             return pdf_path
-        
-        logger.info("curl failed, falling back to requests...")
-        
-        # 方法2: 回退到 requests
-        download_timeout = (30, 180)  # 连接 30s，读取 180s
-        
-        for attempt in range(self.max_retries):
-            try:
-                response = self.session.get(
-                    paper.pdf_url, 
-                    timeout=download_timeout,
-                    stream=True
-                )
-                response.raise_for_status()
-                
-                with open(pdf_path, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
-                
-                logger.info(f"PDF downloaded with requests: {pdf_path}")
-                return pdf_path
-                
-            except requests.exceptions.Timeout as e:
-                logger.warning(f"Download timeout (attempt {attempt + 1}/{self.max_retries}): {e}")
-                if attempt < self.max_retries - 1:
-                    time.sleep(2 ** attempt)
-                    
-            except requests.exceptions.RequestException as e:
-                logger.warning(f"Download failed (attempt {attempt + 1}/{self.max_retries}): {e}")
-                if attempt < self.max_retries - 1:
-                    time.sleep(2 ** attempt)
-        
-        return f"Error downloading PDF: All methods failed for {paper.pdf_url}"
+            
+        except requests.exceptions.Timeout:
+            return f"Error: Download timed out for {pdf_url}"
+        except requests.exceptions.RequestException as e:
+            logger.error(f"PDF download error: {e}")
+            return f"Error downloading PDF: {e}"
 
     def read_paper(self, paper_id: str, save_path: str) -> str:
         """下载并提取论文文本
@@ -520,5 +465,34 @@ if __name__ == "__main__":
         if details:
             print(f"Title: {details.title}")
             print(f"Abstract: {details.abstract[:200]}..." if details.abstract else "No abstract")
+            print(f"PDF URL: {details.pdf_url or 'Not available'}")
+    
+    # 测试下载 PDF
+    print("\n" + "=" * 60)
+    print("3. Testing download_pdf...")
+    print("=" * 60)
+    
+    if papers:
+        # 找一个有 PDF URL 的论文
+        paper_with_pdf = None
+        for p in papers:
+            if p.pdf_url:
+                paper_with_pdf = p
+                break
+        
+        if paper_with_pdf:
+            print(f"Downloading: {paper_with_pdf.title[:50]}...")
+            print(f"PDF URL: {paper_with_pdf.pdf_url}")
+            
+            from pathlib import Path
+            save_dir = str(Path.home() / "paper_downloads")
+            result = searcher.download_pdf(paper_with_pdf.paper_id, save_dir)
+            
+            if result.startswith("Error"):
+                print(f"❌ Download failed: {result}")
+            else:
+                print(f"✅ Downloaded to: {result}")
+        else:
+            print("No paper with available PDF found in search results")
     
     print("\n✅ All tests completed!")
