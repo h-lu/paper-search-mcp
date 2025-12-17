@@ -20,6 +20,7 @@ MCP Server - 学术论文搜索服务
 """
 from typing import List, Dict, Optional, Any
 import logging
+import os
 
 from mcp.server.fastmcp import FastMCP
 
@@ -34,6 +35,26 @@ from .academic_platforms.crossref import CrossRefSearcher
 from .academic_platforms.repec import RePECSearcher
 from .academic_platforms.sci_hub import SciHubFetcher, check_paper_year
 from .paper import Paper
+
+# ============================================================
+# 配置
+# ============================================================
+# PDF 下载目录，可通过环境变量 PAPER_DOWNLOAD_PATH 配置
+# 默认为用户目录下的 paper_downloads (跨平台兼容)
+# - macOS: ~/paper_downloads
+# - Linux: ~/paper_downloads  
+# - Windows: C:\Users\<username>\paper_downloads
+from pathlib import Path
+
+def _get_default_download_path() -> str:
+    """获取默认下载路径，支持跨平台"""
+    env_path = os.environ.get("PAPER_DOWNLOAD_PATH")
+    if env_path:
+        return env_path
+    # 使用 Path.home() 获取跨平台的用户主目录
+    return str(Path.home() / "paper_downloads")
+
+DEFAULT_DOWNLOAD_PATH = _get_default_download_path()
 
 # ============================================================
 # 日志配置
@@ -91,9 +112,12 @@ async def _search(
 async def _download(
     searcher_name: str, 
     paper_id: str, 
-    save_path: str = "./downloads"
+    save_path: Optional[str] = None
 ) -> str:
     """通用下载函数"""
+    if save_path is None:
+        save_path = DEFAULT_DOWNLOAD_PATH
+    
     searcher = SEARCHERS.get(searcher_name)
     if not searcher:
         return f"Error: Unknown searcher {searcher_name}"
@@ -110,9 +134,12 @@ async def _download(
 async def _read(
     searcher_name: str, 
     paper_id: str, 
-    save_path: str = "./downloads"
+    save_path: Optional[str] = None
 ) -> str:
     """通用阅读函数"""
+    if save_path is None:
+        save_path = DEFAULT_DOWNLOAD_PATH
+    
     searcher = SEARCHERS.get(searcher_name)
     if not searcher:
         return f"Error: Unknown searcher {searcher_name}"

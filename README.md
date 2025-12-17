@@ -206,6 +206,7 @@ get_repec_paper("https://ideas.repec.org/p/nbr/nberwo/32000.html")
 | `CROSSREF_MAILTO` | CrossRef 礼貌池访问 | ✅ |
 | `NCBI_API_KEY` | 提高 PubMed 请求限制 | 可选 |
 | `SCIHUB_MIRROR` | 自定义 Sci-Hub 镜像 | 可选 |
+| `PAPER_DOWNLOAD_PATH` | PDF 下载目录 (默认: `~/paper_downloads`) | 可选 |
 
 ---
 
