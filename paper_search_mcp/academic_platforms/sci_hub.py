@@ -46,14 +46,12 @@ class SciHubFetcher:
     def __init__(
         self, 
         base_url: Optional[str] = None, 
-        output_dir: str = "./downloads",
         timeout: int = 30
     ):
         """初始化 Sci-Hub 下载器
         
         Args:
             base_url: Sci-Hub 镜像地址（默认从环境变量或使用默认镜像）
-            output_dir: PDF 保存目录
             timeout: 请求超时时间
         """
         self.base_url = (
@@ -61,8 +59,6 @@ class SciHubFetcher:
             os.environ.get('SCIHUB_MIRROR') or 
             SCIHUB_MIRRORS[0]
         ).rstrip("/")
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
         self.timeout = timeout
         
         self.session = requests.Session()
@@ -79,7 +75,7 @@ class SciHubFetcher:
         
         Args:
             doi: 论文 DOI（如 "10.1038/nature12373"）
-            save_path: 保存目录（默认使用初始化时的目录）
+            save_path: 保存目录（默认 ~/paper_downloads）
         
         Returns:
             下载的文件路径或错误信息
@@ -88,7 +84,8 @@ class SciHubFetcher:
             return "Error: DOI is empty"
         
         doi = doi.strip()
-        output_dir = Path(save_path) if save_path else self.output_dir
+        # 如果未指定路径，使用用户主目录下的 paper_downloads
+        output_dir = Path(save_path) if save_path else Path.home() / "paper_downloads"
         output_dir.mkdir(parents=True, exist_ok=True)
         
         try:

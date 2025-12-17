@@ -46,15 +46,18 @@ from .paper import Paper
 # - Windows: C:\Users\<username>\paper_downloads
 from pathlib import Path
 
-def _get_default_download_path() -> str:
-    """获取默认下载路径，支持跨平台"""
+def get_download_path() -> str:
+    """获取下载路径，支持跨平台
+    
+    注意：此函数每次调用时都会重新计算路径，以确保：
+    1. 环境变量 PAPER_DOWNLOAD_PATH 的变化能够生效
+    2. MCP 在不同环境下运行时能正确获取 HOME 目录
+    """
     env_path = os.environ.get("PAPER_DOWNLOAD_PATH")
     if env_path:
         return env_path
     # 使用 Path.home() 获取跨平台的用户主目录
     return str(Path.home() / "paper_downloads")
-
-DEFAULT_DOWNLOAD_PATH = _get_default_download_path()
 
 # ============================================================
 # 日志配置
@@ -116,7 +119,7 @@ async def _download(
 ) -> str:
     """通用下载函数"""
     if save_path is None:
-        save_path = DEFAULT_DOWNLOAD_PATH
+        save_path = get_download_path()
     
     searcher = SEARCHERS.get(searcher_name)
     if not searcher:
@@ -138,7 +141,7 @@ async def _read(
 ) -> str:
     """通用阅读函数"""
     if save_path is None:
-        save_path = DEFAULT_DOWNLOAD_PATH
+        save_path = get_download_path()
     
     searcher = SEARCHERS.get(searcher_name)
     if not searcher:
@@ -923,7 +926,7 @@ async def download_scihub(doi: str, save_path: Optional[str] = None) -> str:
         download_scihub("10.1038/nature12373")  # 2013 Nature paper
     """
     if save_path is None:
-        save_path = DEFAULT_DOWNLOAD_PATH
+        save_path = get_download_path()
     try:
         return SCIHUB.download_pdf(doi, save_path)
     except Exception as e:
@@ -957,7 +960,7 @@ async def read_scihub_paper(doi: str, save_path: Optional[str] = None) -> str:
         read_scihub_paper("10.1038/nature12373")
     """
     if save_path is None:
-        save_path = DEFAULT_DOWNLOAD_PATH
+        save_path = get_download_path()
     try:
         return SCIHUB.read_paper(doi, save_path)
     except Exception as e:
