@@ -1,8 +1,8 @@
-# 论文搜索 MCP 服务器
+# 论文搜索 MCP 服务器 (Paper Find MCP)
 
 一个用于搜索和下载学术论文的 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) 服务器，支持多个学术平台。专为 Claude Desktop、Cursor 等 LLM 工具设计。
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg) ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
+[![PyPI version](https://badge.fury.io/py/paper-find-mcp.svg)](https://badge.fury.io/py/paper-find-mcp) ![License](https://img.shields.io/badge/license-MIT-blue.svg) ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
 
 **[English](README.md)**
 
@@ -49,12 +49,24 @@ RePEc 是最大的开放经济学文献库，支持丰富的搜索选项：
 
 ### 安装
 
+**从 PyPI 安装（推荐）：**
+
+```bash
+# 使用 uv（推荐）
+uv pip install paper-find-mcp
+
+# 或使用 pip
+pip install paper-find-mcp
+```
+
+**从源码安装：**
+
 ```bash
 # 克隆仓库
-git clone https://github.com/h-lu/paper-search-mcp.git
-cd paper-search-mcp
+git clone https://github.com/h-lu/paper-find-mcp.git
+cd paper-find-mcp
 
-# 使用 uv 安装 (推荐)
+# 使用 uv 安装
 uv pip install -e .
 
 # 或使用 pip
@@ -65,14 +77,14 @@ pip install -e .
 
 编辑 `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 
-**使用 uv (推荐):**
+**使用 uvx（推荐，无需预先安装）：**
 
 ```json
 {
   "mcpServers": {
     "paper_search_server": {
-      "command": "uv",
-      "args": ["run", "-m", "paper_search_mcp.server"],
+      "command": "uvx",
+      "args": ["paper-find-mcp"],
       "env": {
         "SEMANTIC_SCHOLAR_API_KEY": "",
         "CROSSREF_MAILTO": "your_email@example.com",
@@ -84,7 +96,7 @@ pip install -e .
 }
 ```
 
-**使用 Python:**
+**使用 pip 安装后运行：**
 
 ```json
 {
@@ -218,8 +230,8 @@ get_repec_paper("https://ideas.repec.org/p/nbr/nberwo/32000.html")
 
 ```bash
 # 克隆仓库
-git clone https://github.com/openags/paper-search-mcp.git
-cd paper-search-mcp
+git clone https://github.com/h-lu/paper-find-mcp.git
+cd paper-find-mcp
 
 # 创建虚拟环境
 uv venv && source .venv/bin/activate

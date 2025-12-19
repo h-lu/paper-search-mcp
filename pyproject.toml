@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "paper-search-mcp"
-version = "0.2"
+name = "paper-find-mcp"
+version = "0.1.4"
 authors = [
   { name = "Haibo Lu", email = "luhaibo1985@gmail.com" },
 ]
@@ -25,4 +25,4 @@ dependencies = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["paper_search_mcp"]
+packages = ["paper_find_mcp"]

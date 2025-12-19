@@ -1,8 +1,8 @@
-# Paper Search MCP Server
+# Paper Find MCP Server
 
 A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for searching and downloading academic papers from multiple platforms. Designed for LLM tools like Claude Desktop, Cursor, etc.
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg) ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
+[![PyPI version](https://badge.fury.io/py/paper-find-mcp.svg)](https://badge.fury.io/py/paper-find-mcp) ![License](https://img.shields.io/badge/license-MIT-blue.svg) ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
 
 **[中文文档](README_CN.md)**
 
@@ -49,12 +49,24 @@ RePEc is the largest open economics bibliography, with rich search options:
 
 ### Installation
 
+**Install from PyPI (recommended):**
+
+```bash
+# Using uv (recommended)
+uv pip install paper-find-mcp
+
+# Or using pip
+pip install paper-find-mcp
+```
+
+**Install from source:**
+
 ```bash
 # Clone the repository
-git clone https://github.com/h-lu/paper-search-mcp.git
-cd paper-search-mcp
+git clone https://github.com/h-lu/paper-find-mcp.git
+cd paper-find-mcp
 
-# Install with uv (recommended)
+# Install with uv
 uv pip install -e .
 
 # Or use pip
@@ -65,14 +77,14 @@ pip install -e .
 
 Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 
-**Using uv (recommended):**
+**Using uvx (recommended, no pre-installation required):**
 
 ```json
 {
   "mcpServers": {
     "paper_search_server": {
-      "command": "uv",
-      "args": ["run", "-m", "paper_search_mcp.server"],
+      "command": "uvx",
+      "args": ["paper-find-mcp"],
       "env": {
         "SEMANTIC_SCHOLAR_API_KEY": "",
         "CROSSREF_MAILTO": "your_email@example.com",
@@ -84,7 +96,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 }
 ```
 
-**Using Python:**
+**Using pip installed package:**
 
 ```json
 {
@@ -218,8 +230,8 @@ get_repec_paper("https://ideas.repec.org/p/nbr/nberwo/32000.html")
 
 ```bash
 # Clone the repository
-git clone https://github.com/openags/paper-search-mcp.git
-cd paper-search-mcp
+git clone https://github.com/h-lu/paper-find-mcp.git
+cd paper-find-mcp
 
 # Create virtual environment
 uv venv && source .venv/bin/activate
