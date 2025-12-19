@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "paper-find-mcp"
-version = "0.1.4"
+version = "0.1.0"
 authors = [
   { name = "Haibo Lu", email = "luhaibo1985@gmail.com" },
 ]
