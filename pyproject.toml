@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "paper-find-mcp"
-version = "0.2.0"
+version = "0.2.1"
 authors = [
   { name = "Haibo Lu", email = "luhaibo1985@gmail.com" },
 ]
@@ -23,6 +23,10 @@ dependencies = [
     "lxml>=4.9.0", # Better HTML parser for BeautifulSoup
     "httpx[socks]>=0.28.1",
 ]
+
+[project.scripts]
+paper-find-mcp = "paper_find_mcp.server:main"
+
 
 [tool.hatch.build.targets.wheel]
 packages = ["paper_find_mcp"]

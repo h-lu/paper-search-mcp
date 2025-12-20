@@ -82,7 +82,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 ```json
 {
   "mcpServers": {
-    "paper_search_server": {
+    "paper_find_server": {
       "command": "uvx",
       "args": ["paper-find-mcp"],
       "env": {
@@ -101,9 +101,9 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 ```json
 {
   "mcpServers": {
-    "paper_search_server": {
-      "command": "python",
-      "args": ["-m", "paper_find_mcp.server"],
+    "paper_find_server": {
+      "command": "paper-find-mcp",
+      "args": [],
       "env": {
         "SEMANTIC_SCHOLAR_API_KEY": "",
         "CROSSREF_MAILTO": "your_email@example.com",

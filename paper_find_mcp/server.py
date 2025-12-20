@@ -958,7 +958,7 @@ async def read_scihub_paper(doi: str, save_path: Optional[str] = None) -> str:
 # ============================================================
 # 服务器入口
 # ============================================================
-if __name__ == "__main__":
+def main():
     # 配置日志
     logging.basicConfig(
         level=logging.INFO,
@@ -967,3 +967,6 @@ if __name__ == "__main__":
     
     # 运行 MCP 服务器
     mcp.run(transport="stdio")
+
+if __name__ == "__main__":
+    main()
